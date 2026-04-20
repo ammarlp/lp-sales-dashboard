@@ -2,12 +2,17 @@
 let currentPreset = 'month';
 let funnelChart   = null;
 let trendChart    = null;
+const MEETINGS_PAGE_SIZE = 5;
+let meetingsBookedRows = [];
+let meetingsBookedVisible = MEETINGS_PAGE_SIZE;
 
 /* ─── Init ───────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
     setHeaderDate();
     initFlatpickr();
     initCharts();
+    const loadMoreBtn = document.getElementById('meetings-booked-load-more');
+    if (loadMoreBtn) loadMoreBtn.addEventListener('click', onMeetingsLoadMore);
     applyFilters();          // render with default "month" data
     renderStaticLists();
 });
@@ -54,18 +59,21 @@ function setPreset(preset) {
 async function applyFilters() {
     const data = MOCK_DATA[currentPreset] || MOCK_DATA.month;
 
-    // Animate values out then in
+    setOverviewLoading(true);
     document.querySelectorAll('.kpi-value').forEach(el => el.classList.add('refreshing'));
+    renderMeetingsBookedSkeleton();
 
     const liveMain = await fetchOverviewLive();
     const liveTrend = await fetchTrendLive();
 
     setTimeout(() => {
         renderMain(liveMain || data.main);
+        renderMeetingsBooked((liveMain && liveMain.meetings_booked_list) || (data.main && data.main.meetings_booked_list) || []);
         renderLinkedIn(data.linkedin);
         renderColdCalling(data.cold_calling);
         updateCharts(data, liveTrend);
         document.querySelectorAll('.kpi-value').forEach(el => el.classList.remove('refreshing'));
+        setOverviewLoading(false);
     }, 160);
 }
 
@@ -197,6 +205,84 @@ function renderStaticLists() {
     renderCampaignList('list-li-campaigns', 'li-camp-count', CAMPAIGNS.linkedin,     'connections');
     renderRecordingsList();
     renderRepliesList();
+}
+
+function renderMeetingsBooked(items) {
+    const ul = document.getElementById('list-meetings-booked');
+    if (!ul) return;
+
+    meetingsBookedRows = Array.isArray(items) ? items : [];
+    meetingsBookedVisible = MEETINGS_PAGE_SIZE;
+    renderMeetingsBookedVisible();
+}
+
+function renderMeetingsBookedVisible() {
+    const ul = document.getElementById('list-meetings-booked');
+    if (!ul) return;
+
+    const rows = meetingsBookedRows;
+    const visibleRows = rows.slice(0, meetingsBookedVisible);
+    const countText = `${rows.length} total`;
+    setText('meetings-booked-count', countText);
+
+    if (!rows.length) {
+        ul.innerHTML = '<li><div class="item-main"><div class="item-name">No meetings in selected range</div></div></li>';
+        toggleMeetingsLoadMore(false);
+        return;
+    }
+
+    ul.innerHTML = visibleRows.map(r => {
+        const raw = r.start_time ? new Date(r.start_time) : null;
+        const when = raw && Number.isFinite(raw.getTime())
+            ? raw.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+            : 'No date';
+        const status = ((r.status || '').toLowerCase() || 'booked');
+        return `<li>
+            <div class="item-main">
+                <div class="item-name">${r.name || 'Untitled Meeting'}</div>
+                <div class="item-meta">${when}</div>
+            </div>
+            <span class="item-badge">${status}</span>
+        </li>`;
+    }).join('');
+
+    toggleMeetingsLoadMore(rows.length > visibleRows.length);
+}
+
+function onMeetingsLoadMore() {
+    meetingsBookedVisible += MEETINGS_PAGE_SIZE;
+    renderMeetingsBookedVisible();
+}
+
+function toggleMeetingsLoadMore(show) {
+    const actions = document.querySelector('.list-actions');
+    const btn = document.getElementById('meetings-booked-load-more');
+    if (!actions || !btn) return;
+    actions.style.display = show ? 'block' : 'none';
+    const remaining = Math.max(0, meetingsBookedRows.length - meetingsBookedVisible);
+    btn.textContent = remaining > MEETINGS_PAGE_SIZE ? `Load more (${remaining} left)` : 'Load more';
+}
+
+function renderMeetingsBookedSkeleton() {
+    const ul = document.getElementById('list-meetings-booked');
+    if (!ul) return;
+    ul.innerHTML = Array.from({ length: 3 }).map(() => `
+        <li class="skeleton-row">
+            <div class="item-main">
+                <div class="item-name">.</div>
+                <div class="item-meta">.</div>
+            </div>
+            <span class="item-badge">.</span>
+        </li>
+    `).join('');
+    setText('meetings-booked-count', 'Loading...');
+    toggleMeetingsLoadMore(false);
+}
+
+function setOverviewLoading(isLoading) {
+    document.querySelectorAll('.main-grid .kpi-card').forEach(card => {
+        card.classList.toggle('skeleton-loading', isLoading);
+    });
 }
 
 function renderCampaignList(listId, countId, campaigns, statKey) {

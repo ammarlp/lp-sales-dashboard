@@ -52,6 +52,7 @@ app.get('/api/overview', async (req, res) => {
       fetchAllCalendarEvents(startIso, endIso),
       fetchAllOpportunities(),
     ]);
+    const bookedEvents = filterBookedEvents(events);
 
     const opps = filterOppsByCreatedInRange(allOpps, startIso, endIso);
 
@@ -87,7 +88,7 @@ app.get('/api/overview', async (req, res) => {
 
     const oppsByContact = groupOppsByContact(allOpps);
     const excludeStages = new Set(GHL_DEMO_EXCLUDE_STAGE_IDS);
-    const demoCompleted = events.filter(e => {
+    const demoCompleted = bookedEvents.filter(e => {
       const opp = matchOpportunityForEvent(e, oppsByContact.get(e.contactId) || []);
       if (!opp) return false;
       return !excludeStages.has(String(opp.pipelineStageId || opp.stageId || ''));
@@ -103,13 +104,14 @@ app.get('/api/overview', async (req, res) => {
       ok: true,
       range: { startIso, endIso },
       data: {
-        new_meetings_booked: events.length,
+        new_meetings_booked: bookedEvents.length,
         qualified_completed: qualifiedCompleted.length,
         new_trial_signups: trialSignups,
         cost_per_demo: costPerDemo,
         cost_per_trial_signup: costPerTrial,
         pipeline_value: pipelineValue,
         demos_completed: demoCompleted,
+        meetings_booked_list: buildBookedMeetingsList(bookedEvents),
       },
       meta: {
         pipeline_value_stage_ids: GHL_PIPELINE_VALUE_STAGE_IDS,
@@ -130,8 +132,9 @@ app.get('/api/trend', async (req, res) => {
       fetchAllCalendarEvents(startIso, endIso),
       fetchAllOpportunities(),
     ]);
+    const bookedEvents = filterBookedEvents(events);
 
-    const meetingBuckets = bucketByMonth(events, startIso, months, e => e.startTime || e.start_time || e.start || e.startDate);
+    const meetingBuckets = bucketByMonth(bookedEvents, startIso, months, e => e.startTime || e.start_time || e.start || e.startDate);
     const trialSignupOpps = GHL_TRIAL_SIGNUP_STAGE_IDS.length
       ? allOpps.filter(o => GHL_TRIAL_SIGNUP_STAGE_IDS.includes(String(o.pipelineStageId || '')))
       : [];
@@ -139,7 +142,7 @@ app.get('/api/trend', async (req, res) => {
 
     const oppsByContact = groupOppsByContact(allOpps);
     const excludeStages = new Set(GHL_DEMO_EXCLUDE_STAGE_IDS);
-    const demoCompletedEvents = events.filter(e => {
+    const demoCompletedEvents = bookedEvents.filter(e => {
       const opp = matchOpportunityForEvent(e, oppsByContact.get(e.contactId) || []);
       if (!opp) return false;
       return !excludeStages.has(String(opp.pipelineStageId || opp.stageId || ''));
@@ -232,6 +235,28 @@ function bucketByMonth(items, startIso, months, dateAccessor) {
     if (idx >= 0 && idx < months) buckets[idx] += 1;
   });
   return buckets;
+}
+
+function filterBookedEvents(events) {
+  const excluded = new Set(['rescheduled', 'cancelled', 'canceled']);
+  return (events || []).filter(e => {
+    if (!e || e.deleted) return false;
+    const status = String(e.appointmentStatus || e.status || '').trim().toLowerCase();
+    return !excluded.has(status);
+  });
+}
+
+function buildBookedMeetingsList(events, limit = Number.POSITIVE_INFINITY) {
+  return (events || [])
+    .slice()
+    .sort((a, b) => toMs(b.startTime || b.start_time || b.start || b.startDate) - toMs(a.startTime || a.start_time || a.start || a.startDate))
+    .slice(0, limit)
+    .map(e => ({
+      name: e.title || e.contactName || e.name || 'Untitled Meeting',
+      start_time: e.startTime || e.start_time || e.start || e.startDate || null,
+      status: e.appointmentStatus || e.status || '',
+      calendar_id: e.calendarId || null,
+    }));
 }
 
 function parseCostCsv(text) {

@@ -397,6 +397,25 @@ body {
     margin-top: 4px;
 }
 
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.kpi-card.skeleton-loading .kpi-label,
+.kpi-card.skeleton-loading .kpi-value,
+.kpi-card.skeleton-loading .kpi-foot {
+    color: transparent !important;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #ebe6df 25%, #f7f4f0 50%, #ebe6df 75%);
+    background-size: 220% 100%;
+    animation: shimmer 1.2s linear infinite;
+}
+
+.kpi-card.skeleton-loading .kpi-label { width: 65%; min-height: 12px; }
+.kpi-card.skeleton-loading .kpi-value { width: 48%; min-height: 34px; margin-top: 10px; }
+.kpi-card.skeleton-loading .kpi-foot { width: 55%; min-height: 10px; margin-top: 8px; }
+
 /* ── CHARTS ────────────────────────────────── */
 .charts-section { margin-bottom: 16px; }
 
@@ -560,6 +579,41 @@ body {
 .data-list li:last-child { border-bottom: none; }
 .data-list li:hover { background: var(--card-hover); }
 
+.skeleton-row .item-name,
+.skeleton-row .item-meta,
+.skeleton-row .item-badge {
+    color: transparent !important;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #ebe6df 25%, #f7f4f0 50%, #ebe6df 75%);
+    background-size: 220% 100%;
+    animation: shimmer 1.2s linear infinite;
+}
+
+.skeleton-row .item-name { width: 220px; height: 14px; }
+.skeleton-row .item-meta { width: 160px; height: 11px; margin-top: 6px; }
+.skeleton-row .item-badge { width: 72px; height: 16px; }
+
+.list-actions {
+    padding: 10px 14px 14px;
+    border-top: 1px solid var(--border);
+    display: none;
+}
+
+.btn-load-more {
+    padding: 7px 12px;
+    background: var(--bg2);
+    color: var(--text2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.btn-load-more:hover {
+    border-color: var(--border2);
+    color: var(--text);
+}
+
 .item-main { flex: 1; min-width: 0; }
 
 .item-name {
@@ -588,6 +642,9 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.4px;
     flex-shrink: 0;
+    background: var(--bg2);
+    color: var(--text3);
+    border: 1px solid var(--border);
 }
 
 .badge-active  { background: rgba(34,197,94,0.12);  color: #22c55e; }

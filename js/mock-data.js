@@ -19,6 +19,11 @@ const MOCK_DATA = {
             cost_per_trial_signup:  185,
             pipeline_value:         12_500,
             demos_completed:        2,
+            meetings_booked_list: [
+                { name: 'Intro Call - Acme', start_time: '2026-04-21T14:00:00.000Z', status: 'confirmed' },
+                { name: 'Demo - MedTech', start_time: '2026-04-21T12:30:00.000Z', status: 'confirmed' },
+                { name: 'Follow-up - RetailEdge', start_time: '2026-04-21T11:00:00.000Z', status: 'confirmed' },
+            ],
         },
         linkedin: {
             connection_requests:    48,
@@ -51,6 +56,10 @@ const MOCK_DATA = {
             cost_per_trial_signup:  220,
             pipeline_value:         67_000,
             demos_completed:        13,
+            meetings_booked_list: [
+                { name: 'Healthcare Walkthrough', start_time: '2026-04-20T15:00:00.000Z', status: 'confirmed' },
+                { name: 'Growth Strategy Call', start_time: '2026-04-19T17:30:00.000Z', status: 'confirmed' },
+            ],
         },
         linkedin: {
             connection_requests:    280,
@@ -83,6 +92,10 @@ const MOCK_DATA = {
             cost_per_trial_signup:  278,
             pipeline_value:         248_500,
             demos_completed:        51,
+            meetings_booked_list: [
+                { name: 'Launchpad 1:1 Demo', start_time: '2026-04-18T18:00:00.000Z', status: 'confirmed' },
+                { name: 'Secure Your 1:1 Walkthrough', start_time: '2026-04-17T16:00:00.000Z', status: 'confirmed' },
+            ],
         },
         linkedin: {
             connection_requests:    1240,
@@ -115,6 +128,10 @@ const MOCK_DATA = {
             cost_per_trial_signup:  310,
             pipeline_value:         198_000,
             demos_completed:        43,
+            meetings_booked_list: [
+                { name: 'Website Calendar Demo', start_time: '2026-03-28T14:30:00.000Z', status: 'confirmed' },
+                { name: 'Discovery Call - Q2', start_time: '2026-03-27T11:30:00.000Z', status: 'confirmed' },
+            ],
         },
         linkedin: {
             connection_requests:    1080,
