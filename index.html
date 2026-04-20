@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Launchpad Dashboard</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+</head>
+<body>
+
+    <!-- Top Header -->
+    <!-- <header class="top-header">
+        <div class="header-left">
+            <h1 class="header-title">Launchpad Dashboard</h1>
+        </div>
+        <div class="header-right">
+            <span class="status-dot"></span>
+            <span class="status-text">Live</span>
+            <span class="header-date" id="headerDate"></span>
+        </div>
+    </header> -->
+
+    <!-- Main Content -->
+    <div class="main-content">
+
+        <!-- Dashboard Title Bar -->
+        <div class="dashboard-title-bar">
+            <div class="dashboard-title-wrap">
+                <h1 class="dashboard-title">Launchpad Dashboard</h1>
+                <div class="dashboard-subtitle">Lead flow visibility, conversion tracking, and revenue performance</div>
+            </div>
+            <button class="filter-btn" id="filterToggleBtn" onclick="toggleFilterPanel()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                </svg>
+                Filter
+            </button>
+        </div>
+
+        <!-- Filter Panel -->
+        <div class="filter-panel" id="filterPanel">
+            <div class="filter-panel-body">
+                <div class="filter-group">
+                    <label class="filter-label">Time Period</label>
+                    <div class="date-presets">
+                        <button class="preset-btn" data-preset="today" onclick="setPreset('today')">Today</button>
+                        <button class="preset-btn" data-preset="week" onclick="setPreset('week')">This Week</button>
+                        <button class="preset-btn active" data-preset="month" onclick="setPreset('month')">This Month</button>
+                        <button class="preset-btn" data-preset="last_month" onclick="setPreset('last_month')">Last Month</button>
+                        <button class="preset-btn" data-preset="custom" onclick="setPreset('custom')">Custom Range</button>
+                    </div>
+                    <div class="custom-dates" id="customDates">
+                        <input type="text" id="dateFrom" class="date-input" placeholder="Start date">
+                        <span class="date-sep">→</span>
+                        <input type="text" id="dateTo" class="date-input" placeholder="End date">
+                    </div>
+                </div>
+                <!-- <div class="filter-group">
+                    <label class="filter-label">Channel</label>
+                    <select class="filter-select" id="channelFilter" onchange="applyFilters()">
+                        <option value="all">All Channels</option>
+                        <option value="linkedin">LinkedIn Only</option>
+                        <option value="cold_calling">Cold Calling Only</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Team Member</label>
+                    <select class="filter-select" id="memberFilter" onchange="applyFilters()">
+                        <option value="all">All Members</option>
+                        <option value="tabish">Tabish</option>
+                        <option value="ali">Muhammad Ali</option>
+                        <option value="ammar">Ammar</option>
+                    </select>
+                </div> -->
+                <div class="filter-actions">
+                    <button class="btn-apply" onclick="applyFilters()">Apply Filters</button>
+                    <button class="btn-reset" onclick="resetFilters()">Reset</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main KPI Cards -->
+        <section class="section">
+            <div class="section-label">Overview Metrics <span class="source-tag">GHL + Pipeline API</span></div>
+            <div class="kpi-grid main-grid">
+                <div class="kpi-card">
+                    <div class="kpi-label">New Meetings Booked</div>
+                    <div class="kpi-value" id="v-meetings">—</div>
+                    <div class="kpi-foot">GHL Calendar API</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Qualified Completed</div>
+                    <div class="kpi-value" id="v-qualified">—</div>
+                    <div class="kpi-foot">Pipeline API</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">New Trial Sign-ups</div>
+                    <div class="kpi-value" id="v-trial-signups">—</div>
+                    <div class="kpi-foot">Pipeline API</div>
+                </div>
+                <div class="kpi-card highlight-card">
+                    <div class="kpi-label">Cost per Demo Completed</div>
+                    <div class="kpi-value" id="v-cost-demo">—</div>
+                    <div class="kpi-foot">Calculated</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Cost of Trial Sign Up</div>
+                    <div class="kpi-value" id="v-cost-trial">—</div>
+                    <div class="kpi-foot">Calculated</div>
+                </div>
+                <div class="kpi-card highlight-card">
+                    <div class="kpi-label">Pipeline Value</div>
+                    <div class="kpi-value" id="v-pipeline">—</div>
+                    <div class="kpi-foot">Pipeline API</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Demo Completed</div>
+                    <div class="kpi-value" id="v-demos">—</div>
+                    <div class="kpi-foot">Pipeline + GHL Calendar</div>
+                </div>
+            </div>
+        </section>
+        <!-- Charts Row -->
+        <section class="section charts-section">
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <span class="chart-title">6-Month Performance Trend</span>
+                        <div class="legend-dots">
+                            <span class="ldot" style="background:#f07c21"></span><span>Meetings</span>
+                            <span class="ldot" style="background:#3b82f6;margin-left:10px"></span><span>Trial Sign-ups</span>
+                            <span class="ldot" style="background:#22c55e;margin-left:10px"></span><span>Demos Completed</span>
+                        </div>
+                    </div>
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- LinkedIn Outreach -->
+        <section class="channel-section" id="section-linkedin">
+            <div class="channel-header">
+                <div class="channel-icon li-icon">in</div>
+                <div>
+                    <div class="channel-name">LinkedIn Outreach</div>
+                    <div class="channel-sub">AimFox Integration Â· Excel Import</div>
+                </div>
+                <div class="channel-conversion" id="li-conv-rate"></div>
+            </div>
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-label">Total Connection Requests Sent</div>
+                    <div class="kpi-value" id="v-li-conn">â€”</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Total Accepted</div>
+                    <div class="kpi-value" id="v-li-accepted">â€”</div>
+                    <div class="kpi-rate" id="r-li-accepted"></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Total Replied</div>
+                    <div class="kpi-value" id="v-li-replied">â€”</div>
+                    <div class="kpi-rate" id="r-li-replied"></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Demos Booked</div>
+                    <div class="kpi-value" id="v-li-demos">â€”</div>
+                    <div class="kpi-rate" id="r-li-demos"></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Qualified Demos</div>
+                    <div class="kpi-value" id="v-li-qd">â€”</div>
+                </div>
+                <div class="kpi-card highlight-card">
+                    <div class="kpi-label">Cost Per Qualified Demo</div>
+                    <div class="kpi-value" id="v-li-cpqd">â€”</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Total Sign-ups</div>
+                    <div class="kpi-value" id="v-li-su">â€”</div>
+                </div>
+                <div class="kpi-card highlight-card">
+                    <div class="kpi-label">Cost per Trial Sign Up</div>
+                    <div class="kpi-value" id="v-li-cpsu">â€”</div>
+                </div>
+            </div>
+            <div class="channel-chart-wrap">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <span class="chart-title">LinkedIn Conversion Funnel</span>
+                        <span class="chart-subtitle" id="funnelSubtitle">This Month</span>
+                    </div>
+                    <canvas id="funnelChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Cold Calling -->
+        <section class="channel-section" id="section-cold-calling">
+            <div class="channel-header">
+                <div class="channel-icon cc-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="channel-name">Cold Calling</div>
+                    <div class="channel-sub">Campaign Recordings · Auto-logging</div>
+                </div>
+                <div class="channel-conversion" id="cc-conv-rate"></div>
+            </div>
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-label">Total Cold Calls Made</div>
+                    <div class="kpi-value" id="v-cc-calls">—</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Total Pickups</div>
+                    <div class="kpi-value" id="v-cc-pickups">—</div>
+                    <div class="kpi-rate" id="r-cc-pickups"></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Positive Response</div>
+                    <div class="kpi-value" id="v-cc-positive">—</div>
+                    <div class="kpi-rate" id="r-cc-positive"></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Demo Booked</div>
+                    <div class="kpi-value" id="v-cc-demos">—</div>
+                    <div class="kpi-rate" id="r-cc-demos"></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Qualified Demos</div>
+                    <div class="kpi-value" id="v-cc-qd">—</div>
+                </div>
+                <div class="kpi-card highlight-card">
+                    <div class="kpi-label">Cost Per Qualified Demo</div>
+                    <div class="kpi-value" id="v-cc-cpqd">—</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Total Sign-ups</div>
+                    <div class="kpi-value" id="v-cc-su">—</div>
+                </div>
+                <div class="kpi-card highlight-card">
+                    <div class="kpi-label">Cost per Trial Sign Up</div>
+                    <div class="kpi-value" id="v-cc-cpsu">—</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Lists Row -->
+        <section class="section">
+            <div class="lists-grid">
+                <div class="list-card">
+                    <div class="list-header">
+                        <span class="list-title">Cold Calling Campaigns Running</span>
+                        <span class="list-count" id="cc-camp-count"></span>
+                    </div>
+                    <ul class="data-list" id="list-cc-campaigns"></ul>
+                </div>
+                <div class="list-card">
+                    <div class="list-header">
+                        <span class="list-title">LinkedIn Campaigns Running</span>
+                        <span class="list-count" id="li-camp-count"></span>
+                    </div>
+                    <ul class="data-list" id="list-li-campaigns"></ul>
+                </div>
+            </div>
+            <div class="lists-grid" style="margin-top:12px">
+                <div class="list-card">
+                    <div class="list-header">
+                        <span class="list-title">Recent Cold Calling Recordings</span>
+                        <span class="list-badge">Last 5</span>
+                    </div>
+                    <ul class="data-list" id="list-recordings"></ul>
+                </div>
+                <div class="list-card">
+                    <div class="list-header">
+                        <span class="list-title">Most Recent LinkedIn Replies</span>
+                        <span class="list-badge">Last 10</span>
+                    </div>
+                    <ul class="data-list" id="list-li-replies"></ul>
+                </div>
+            </div>
+        </section>
+
+    </div><!-- /main-content -->
+
+    <script src="js/mock-data.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

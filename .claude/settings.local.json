@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php -l lib/helpers.php)",
+      "Bash(curl -s -o /tmp/ghl_iso.json -w \"HTTP:%{http_code}\\\\n\" -H \"Authorization: Bearer pit-56c30375-a071-4cff-804f-b2beb4908f9d\" -H \"Version: 2021-07-28\" \"https://services.leadconnectorhq.com/calendars/events?calendarId=NX8WftyAK26eiDefp1gy&locationId=zowESDMvc00NUcbdQQgM&startTime=2026-04-01T00:00:00.000Z&endTime=2026-04-30T23:59:59.999Z\")",
+      "Read(//tmp/**)",
+      "Bash(curl -sL -w \"\\\\nHTTP:%{http_code}\\\\n\" \"https://docs.google.com/spreadsheets/d/1DH00hSCdtRR3QHJFnCoQ92LA0IU84LCMypG_FehDMEA/export?format=csv\")",
+      "Bash(curl -s -w \"\\\\nHTTP:%{http_code}\\\\n\" -H \"Authorization: Bearer pit-56c30375-a071-4cff-804f-b2beb4908f9d\" -H \"Version: 2021-07-28\" \"https://services.leadconnectorhq.com/custom-fields?locationId=zowESDMvc00NUcbdQQgM\")",
+      "Bash(curl -s -w \"\\\\nHTTP:%{http_code}\\\\n\" -H \"Authorization: Bearer pit-56c30375-a071-4cff-804f-b2beb4908f9d\" -H \"Version: 2021-07-28\" \"https://services.leadconnectorhq.com/locations/zowESDMvc00NUcbdQQgM/customFields\" -o /tmp/ghl_cf.json)",
+      "Bash(curl -s -H \"Authorization: Bearer pit-56c30375-a071-4cff-804f-b2beb4908f9d\" -H \"Version: 2021-07-28\" \"https://services.leadconnectorhq.com/opportunities/search?location_id=zowESDMvc00NUcbdQQgM&pipeline_id=Gz0lwkSdk1KuSsL3S1L5&limit=5\" -o \"/c/Users/ammar/opp.json\")",
+      "Bash(node -e \"const d=require\\('C:/Users/ammar/opp.json'\\);const list=d.opportunities||d.items||[];console.log\\('count:',list.length\\);const sample=list[0]||{};console.log\\('top-level keys:',Object.keys\\(sample\\).slice\\(0,20\\).join\\(','\\)\\);console.log\\('customFields:',typeof sample.customFields,Array.isArray\\(sample.customFields\\)?'len='+sample.customFields.length:''\\);if\\(Array.isArray\\(sample.customFields\\)\\)console.log\\('first 2:',JSON.stringify\\(sample.customFields.slice\\(0,2\\)\\)\\);console.log\\('status:',sample.status,'stage:',sample.pipelineStageId\\);\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const d=JSON.parse\\(fs.readFileSync\\('C:/Users/ammar/opp.json','utf8'\\)\\);const list=d.opportunities||d.items||[];const vals={};list.forEach\\(o=>\\(o.customFields||[]\\).forEach\\(f=>{if\\(f.id==='3YBFCT0baURi1GErtaa7'\\){vals[f.fieldValueString]=\\(vals[f.fieldValueString]||0\\)+1}}\\)\\);console.log\\('Opportunity Qualification Status values in first 5:',JSON.stringify\\(vals\\)\\);\")",
+      "Bash(curl -s -H \"Authorization: Bearer pit-56c30375-a071-4cff-804f-b2beb4908f9d\" -H \"Version: 2021-07-28\" \"https://services.leadconnectorhq.com/opportunities/search?location_id=zowESDMvc00NUcbdQQgM&pipeline_id=Gz0lwkSdk1KuSsL3S1L5&limit=100\" -o \"C:/Users/ammar/opp100.json\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const d=JSON.parse\\(fs.readFileSync\\('C:/Users/ammar/opp100.json','utf8'\\)\\);const list=d.opportunities||d.items||[];console.log\\('total:',list.length\\);const vals={};let withField=0;list.forEach\\(o=>{const cf=\\(o.customFields||[]\\).find\\(f=>f.id==='3YBFCT0baURi1GErtaa7'\\);if\\(cf\\){withField++;vals[cf.fieldValueString||'\\(empty\\)']=\\(vals[cf.fieldValueString||'\\(empty\\)']||0\\)+1}}\\);console.log\\('opps with qualification field:',withField\\);console.log\\('values:',JSON.stringify\\(vals,null,2\\)\\);\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const d=JSON.parse\\(fs.readFileSync\\('C:/Users/ammar/opp100.json','utf8'\\)\\);const list=d.opportunities||d.items||[];const ids={};list.forEach\\(o=>\\(o.customFields||[]\\).forEach\\(f=>{ids[f.id]=\\(ids[f.id]||0\\)+1}\\)\\);console.log\\('distinct custom field ids on opps:',Object.keys\\(ids\\).length\\);console.log\\(JSON.stringify\\(ids,null,2\\)\\);\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const d=JSON.parse\\(fs.readFileSync\\('C:/Users/ammar/ghl_cf.json'?1:0,'utf8'\\)\\);\")",
+      "Bash(cp /tmp/ghl_cf.json \"C:/Users/ammar/ghl_cf.json\")",
+      "Bash(curl -s -H \"Authorization: Bearer pit-56c30375-a071-4cff-804f-b2beb4908f9d\" -H \"Version: 2021-07-28\" \"https://services.leadconnectorhq.com/locations/zowESDMvc00NUcbdQQgM/customFields\" -o \"C:/Users/ammar/ghl_cf.json\")",
+      "Bash(node -e ' *)",
+      "Bash(curl -s -H \"Authorization: Bearer pit-56c30375-a071-4cff-804f-b2beb4908f9d\" -H \"Version: 2021-07-28\" \"https://services.leadconnectorhq.com/locations/zowESDMvc00NUcbdQQgM/customFields?model=opportunity\" -o \"C:/Users/ammar/opp_cf.json\")",
+      "Bash(curl -s -H \"Authorization: Bearer pit-56c30375-a071-4cff-804f-b2beb4908f9d\" -H \"Version: 2021-07-28\" \"https://services.leadconnectorhq.com/opportunities/pipelines?locationId=zowESDMvc00NUcbdQQgM\" -o \"C:/Users/ammar/pipelines.json\")"
+    ]
+  }
+}
