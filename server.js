@@ -30,18 +30,40 @@ const GHL_DEMO_EXCLUDE_STAGE_IDS = (process.env.GHL_DEMO_EXCLUDE_STAGE_IDS || ''
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
+const GHL_CALL_STATUS_FIELD_ID = process.env.GHL_CALL_STATUS_FIELD_ID || 'zTuUVDw4rojZrdnrM0Zq';
+const GHL_CALL_PICKUP_VALUES = parseCsvValues(
+  process.env.GHL_CALL_PICKUP_VALUES || 'Answered,Interested,Receptionist,Appointment Scheduled,Corporates'
+);
+const GHL_CALL_POSITIVE_VALUES = parseCsvValues(
+  process.env.GHL_CALL_POSITIVE_VALUES || 'Interested,Appointment Scheduled'
+);
+const GHL_CALL_DEMO_VALUES = parseCsvValues(
+  process.env.GHL_CALL_DEMO_VALUES || 'Appointment Scheduled'
+);
+const GHL_CALL_RECORDING_FIELD_ID = process.env.GHL_CALL_RECORDING_FIELD_ID || '';
+const GHL_CALL_FETCH_MAX_CONTACTS = Math.max(50, Number(process.env.GHL_CALL_FETCH_MAX_CONTACTS || 180));
+const COLD_CALLING_CACHE_TTL_MS = 2 * 60 * 1000;
+const AIMFOX_API_KEY = process.env.AIMFOX_API_KEY || '';
+const AIMFOX_BASE = process.env.AIMFOX_BASE || 'https://api.aimfox.com/api/v2';
+const AIMFOX_CACHE_TTL_MS = 60 * 1000;
 const COST_BASE = Number(process.env.COST_BASE || 1000);
 const COST_BASE_DAILY = Number(process.env.COST_BASE_DAILY || 0);
 const COST_BASE_WEEKLY = Number(process.env.COST_BASE_WEEKLY || 0);
 const COST_BASE_MONTHLY = Number(process.env.COST_BASE_MONTHLY || 0);
 const COSTS_SHEET_URL = process.env.COSTS_SHEET_URL || '';
 const COSTS_CACHE_TTL_MS = 5 * 60 * 1000;
+let coldCallingCache = new Map();
+let aimfoxCache = new Map();
 
 if (!GHL_API_KEY || !GHL_LOCATION_ID || !GHL_PIPELINE_ID) {
   console.warn('Missing required GHL env vars. Check .env: GHL_API_KEY, GHL_LOCATION_ID, GHL_PIPELINE_ID');
 }
 
 app.use(express.static(__dirname));
+app.use((req, res, next) => {
+  // Logs removed to reduce clutter
+  next();
+});
 
 app.get('/api/overview', async (req, res) => {
   try {
@@ -168,6 +190,189 @@ app.get('/api/trend', async (req, res) => {
   }
 });
 
+app.get('/api/cold-calling', async (req, res) => {
+  try {
+    const { preset = 'month', start, end } = req.query;
+    const { startIso, endIso } = getDateRange(preset, start, end);
+    const cacheKey = `${preset}|${startIso}|${endIso}`;
+    const cached = coldCallingCache.get(cacheKey);
+    if (cached && (Date.now() - cached.at) < COLD_CALLING_CACHE_TTL_MS) {
+      return res.json(cached.payload);
+    }
+
+    const contactSummaries = await fetchContactSummariesInRange(startIso, endIso, GHL_CALL_FETCH_MAX_CONTACTS);
+    const contacts = await fetchContactsByIds(contactSummaries.map(c => c.id));
+
+    let totalCalls = 0;
+    let pickups = 0;
+    let positive = 0;
+    let demosBooked = 0;
+    const recordings = [];
+
+    for (const c of contacts) {
+      const statuses = getContactStatuses(c);
+      if (!statuses.length) continue;
+      totalCalls += 1;
+
+      if (hasAnyStatus(statuses, GHL_CALL_PICKUP_VALUES)) pickups += 1;
+      if (hasAnyStatus(statuses, GHL_CALL_POSITIVE_VALUES)) positive += 1;
+      if (hasAnyStatus(statuses, GHL_CALL_DEMO_VALUES)) demosBooked += 1;
+
+      const recordingUrl = getRecordingUrl(c);
+      if (recordingUrl) {
+        recordings.push({
+          name: c.contactName || `${c.firstName || ''} ${c.lastName || ''}`.trim() || 'Unknown Contact',
+          date: c.dateUpdated || c.dateAdded || null,
+          url: recordingUrl,
+          outcome: statuses.join(', '),
+        });
+      }
+    }
+
+    recordings.sort((a, b) => toMs(b.date) - toMs(a.date));
+    const recordingsTop = recordings.slice(0, 10);
+
+    const baseCost = await resolveBaseCost(preset, startIso, endIso);
+    const costPerQualifiedDemo = demosBooked ? Math.round(baseCost / demosBooked) : 0;
+
+    const payload = {
+      ok: true,
+      range: { startIso, endIso },
+      cold_calling: {
+        total_calls: totalCalls,
+        total_pickups: pickups,
+        positive_response: positive,
+        demos_booked: demosBooked,
+        qualified_demos: demosBooked,
+        cost_per_qualified_demo: costPerQualifiedDemo,
+        total_signups: 0,
+        cost_per_trial_signup: 0,
+      },
+      recordings: recordingsTop,
+      meta: {
+        call_status_field_id: GHL_CALL_STATUS_FIELD_ID,
+      },
+    };
+    coldCallingCache.set(cacheKey, { at: Date.now(), payload });
+    res.json(payload);
+  } catch (err) {
+    console.error('Cold calling error:', err.message);
+    // Keep dashboard functional even when GHL throttles.
+    res.json({
+      ok: true,
+      cold_calling: {
+        total_calls: 0,
+        total_pickups: 0,
+        positive_response: 0,
+        demos_booked: 0,
+        qualified_demos: 0,
+        cost_per_qualified_demo: 0,
+        total_signups: 0,
+        cost_per_trial_signup: 0,
+      },
+      recordings: [],
+      meta: {
+        degraded: true,
+        reason: err.message,
+      },
+    });
+  }
+});
+
+app.get('/api/linkedin', async (req, res) => {
+  try {
+    const { preset = 'month', start, end } = req.query;
+    const { startIso, endIso } = getDateRange(preset, start, end);
+    const cacheKey = `${preset}|${startIso}|${endIso}`;
+    const cached = aimfoxCache.get(cacheKey);
+    if (cached && (Date.now() - cached.at) < AIMFOX_CACHE_TTL_MS) {
+      return res.json(cached.payload);
+    }
+
+    if (!AIMFOX_API_KEY) {
+      return res.json({
+        ok: true,
+        linkedin: emptyLinkedinMetrics(),
+        replies: [],
+        meta: { degraded: true, reason: 'Missing AIMFOX_API_KEY' },
+      });
+    }
+
+    const [accountsData, recentLeadsData, conversationsData] = await Promise.all([
+      fetchAimfoxJson('/accounts'),
+      fetchAimfoxJson('/analytics/recent-leads'),
+      fetchAimfoxJson('/conversations'),
+    ]);
+
+    const accountIds = new Set((accountsData.accounts || []).map(a => String(a.id || '')).filter(Boolean));
+    const leads = Array.isArray(recentLeadsData.leads) ? recentLeadsData.leads : [];
+    const leadsInRange = leads.filter(l => isInRange(l.timestamp, startIso, endIso));
+
+    const transitionCounts = leadsInRange.reduce((acc, l) => {
+      const t = String(l.transition || '').toLowerCase();
+      acc[t] = (acc[t] || 0) + 1;
+      return acc;
+    }, {});
+
+    let positiveResponse = 0;
+    leadsInRange.forEach(l => {
+        const tags = Array.isArray(l.tags) ? l.tags : (typeof l.tags === 'string' ? l.tags.split(',') : []);
+        if (tags.some(t => {
+            const low = String(t).trim().toLowerCase();
+            return low === 'interested' || low === 'positive' || low === 'warm';
+        })) {
+            positiveResponse++;
+        }
+    });
+
+    const accepted = transitionCounts.accepted || 0;
+    const replied = transitionCounts.reply || 0;
+    const connect = transitionCounts.connect || transitionCounts.connection || 0;
+    const connectionRequests = connect > 0 ? connect : (accepted + replied);
+
+    const conversations = Array.isArray(conversationsData.conversations) ? conversationsData.conversations : [];
+    const replies = conversations
+      .filter(c => isInRange(c.last_activity_at, startIso, endIso))
+      .map(c => normalizeAimfoxReply(c, accountIds))
+      .filter(Boolean)
+      .sort((a, b) => toMs(b.timestamp) - toMs(a.timestamp))
+      .slice(0, 10);
+
+    const linkedin = {
+      connection_requests: connectionRequests,
+      total_accepted: accepted,
+      total_replied: replied,
+      positive_response: positiveResponse,
+      demos_booked: 0,
+      qualified_demos: 0,
+      cost_per_qualified_demo: 0,
+      total_signups: 0,
+      cost_per_trial_signup: 0,
+    };
+
+    const payload = {
+      ok: true,
+      range: { startIso, endIso },
+      linkedin,
+      replies,
+      meta: {
+        inferred_connection_requests: connect === 0,
+        transitions: transitionCounts,
+      },
+    };
+    aimfoxCache.set(cacheKey, { at: Date.now(), payload });
+    res.json(payload);
+  } catch (err) {
+    console.error('LinkedIn (Aimfox) error:', err.message);
+    res.json({
+      ok: true,
+      linkedin: emptyLinkedinMetrics(),
+      replies: [],
+      meta: { degraded: true, reason: err.message },
+    });
+  }
+});
+
 function authHeaders() {
   return {
     Authorization: `Bearer ${GHL_API_KEY}`,
@@ -177,12 +382,47 @@ function authHeaders() {
 }
 
 async function fetchJson(url, options = {}) {
-  const res = await fetch(url, { ...options, headers: { ...authHeaders(), ...(options.headers || {}) } });
-  if (!res.ok) {
+  const headers = { ...authHeaders(), ...(options.headers || {}) };
+  const attempts = 4;
+  for (let i = 1; i <= attempts; i++) {
+    const res = await fetch(url, { ...options, headers });
+    if (res.ok) return res.json();
+
     const text = await res.text();
+    if (res.status === 429 && i < attempts) {
+      console.log(`[GHL-RETRY] 429 attempt ${i} for ${url}`);
+      const retryAfter = Number(res.headers.get('Retry-After') || 0);
+      const backoffMs = retryAfter > 0 ? retryAfter * 1000 : (300 * (2 ** (i - 1)));
+      await sleep(backoffMs);
+      continue;
+    }
     throw new Error(`GHL ${res.status}: ${text}`);
   }
-  return res.json();
+  throw new Error('GHL request failed after retries');
+}
+
+async function fetchAimfoxJson(path) {
+  const url = path.startsWith('http') ? path : `${AIMFOX_BASE}${path}`;
+  const attempts = 4;
+  for (let i = 1; i <= attempts; i++) {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${AIMFOX_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (res.ok) return res.json();
+    const text = await res.text();
+    if ((res.status === 429 || res.status === 503) && i < attempts) {
+      const retryAfter = Number(res.headers.get('Retry-After') || 0);
+      const backoffMs = retryAfter > 0 ? retryAfter * 1000 : (300 * (2 ** (i - 1)));
+      console.log(`[AIMFOX-RETRY] ${res.status} attempt ${i} for ${url}`);
+      await sleep(backoffMs);
+      continue;
+    }
+    throw new Error(`AIMFOX ${res.status}: ${text}`);
+  }
+  throw new Error('Aimfox request failed after retries');
 }
 
 function getDateRange(preset, start, end) {
@@ -476,6 +716,55 @@ async function fetchAllOpportunities() {
   return all;
 }
 
+async function fetchContactSummariesInRange(startIso, endIso, maxContacts) {
+  const limit = 100;
+  const pagesHardLimit = 25;
+  const all = [];
+
+  for (let page = 1; page <= pagesHardLimit; page++) {
+    const url = new URL(`${GHL_BASE}/contacts/`);
+    url.searchParams.set('locationId', GHL_LOCATION_ID);
+    url.searchParams.set('limit', String(limit));
+    url.searchParams.set('page', String(page));
+
+    const data = await fetchJson(url.toString());
+    const batch = Array.isArray(data.contacts) ? data.contacts : [];
+    const inRange = batch.filter(c => isInRange(c.dateUpdated || c.dateAdded || c.updatedAt || c.createdAt, startIso, endIso));
+    all.push(...inRange);
+    if (all.length >= maxContacts) break;
+    if (batch.length < limit) break;
+    await sleep(120);
+  }
+  return all.slice(0, maxContacts);
+}
+
+async function fetchContactsByIds(ids) {
+  const uniqueIds = [...new Set((ids || []).filter(Boolean))];
+  const all = [];
+
+  const CONCURRENCY = 7;
+  for (let i = 0; i < uniqueIds.length; i += CONCURRENCY) {
+    const chunk = uniqueIds.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(chunk.map(async id => {
+      try {
+        const data = await fetchJson(`${GHL_BASE}/contacts/${id}`);
+        return data.contact || data || null;
+      } catch {
+        // Continue; partial data is better than hard-failing the dashboard.
+        return null;
+      }
+    }));
+    
+    for (const c of results) {
+      if (c) all.push(c);
+    }
+    
+    // Safety buffer: 7 requests every 500ms = 14 req/sec (Safe within GHL burst rules)
+    await sleep(500); 
+  }
+  return all;
+}
+
 function filterOppsByCreatedInRange(opps, startIso, endIso) {
   const start = Date.parse(startIso);
   const end = Date.parse(endIso);
@@ -531,6 +820,119 @@ function isInRange(rawDate, startIso, endIso) {
 
 function toMs(rawDate) {
   return rawDate ? Date.parse(rawDate) : NaN;
+}
+
+function parseCsvValues(raw) {
+  return (raw || '')
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function normalizeAimfoxReply(conversation, accountIds) {
+  let msg = conversation.last_message || {};
+  let body = String(msg.body || '').trim();
+
+  if (Array.isArray(conversation.messages) && conversation.messages.length > 0) {
+    const leadMsg = conversation.messages.slice().reverse().find(m => {
+      const sId = String(m.sender?.id || m.sender_id || '');
+      return sId && !accountIds.has(sId) && String(m.body || '').trim();
+    });
+    if (leadMsg) {
+      msg = leadMsg;
+      body = String(msg.body || '').trim();
+    }
+  }
+
+  if (!body) return null;
+  
+  const senderId = String(msg.sender?.id || msg.sender_id || '');
+  const isOurs = senderId && accountIds.has(senderId);
+
+  const participants = Array.isArray(conversation.participants) ? conversation.participants : [];
+  const lead = participants.find(p => {
+    const pid = String(p.id || '');
+    return pid && !accountIds.has(pid);
+  }) || participants[0] || {};
+
+  if (isOurs) {
+    body = `You: ${body}`;
+  }
+
+  return {
+    name: lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Unknown Lead',
+    company: lead.occupation || '',
+    msg: body,
+    timestamp: msg.created_at || conversation.last_activity_at || null,
+  };
+}
+
+function emptyLinkedinMetrics() {
+  return {
+    connection_requests: 0,
+    total_accepted: 0,
+    total_replied: 0,
+    positive_response: 0,
+    demos_booked: 0,
+    qualified_demos: 0,
+    cost_per_qualified_demo: 0,
+    total_signups: 0,
+    cost_per_trial_signup: 0,
+  };
+}
+
+function parseStatusValues(raw) {
+  if (Array.isArray(raw)) return raw.map(v => String(v || '').trim()).filter(Boolean);
+  const s = String(raw || '').trim();
+  if (!s) return [];
+
+  try {
+    const parsed = JSON.parse(s);
+    if (Array.isArray(parsed)) return parsed.map(v => String(v || '').trim()).filter(Boolean);
+  } catch {}
+
+  return s
+    .split(/[,\n;|]/)
+    .map(v => v.trim())
+    .filter(Boolean);
+}
+
+function getContactStatuses(contact) {
+  const customFields = Array.isArray(contact.customFields) ? contact.customFields : [];
+  const hit = customFields.find(f => String(f.id) === String(GHL_CALL_STATUS_FIELD_ID));
+  if (!hit) return [];
+  const raw = hit.value ?? hit.fieldValueString ?? hit.field_value ?? '';
+  return parseStatusValues(raw);
+}
+
+function hasAnyStatus(statuses, allowedLower) {
+  const set = new Set((statuses || []).map(s => String(s || '').toLowerCase().trim()));
+  return allowedLower.some(v => set.has(v));
+}
+
+function getRecordingUrl(contact) {
+  const fields = Array.isArray(contact.customFields) ? contact.customFields : [];
+  if (GHL_CALL_RECORDING_FIELD_ID) {
+    const hit = fields.find(f => String(f.id) === String(GHL_CALL_RECORDING_FIELD_ID));
+    const val = String(hit?.value ?? hit?.fieldValueString ?? '').trim();
+    return /^https?:\/\//i.test(val) ? val : '';
+  }
+
+  const anyUrl = fields.find(f => {
+    const v = String(f.value ?? f.fieldValueString ?? '').trim();
+    return /^https?:\/\//i.test(v) && /mp3|wav|m4a|ogg|audio|record/i.test(v);
+  });
+  return anyUrl ? String(anyUrl.value ?? anyUrl.fieldValueString ?? '').trim() : '';
+}
+
+function chunk(items, size) {
+  const out = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function getCustomFieldValue(opportunity, fieldId) {

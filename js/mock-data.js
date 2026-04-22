@@ -216,8 +216,8 @@ const CAMPAIGNS = {
 
 /* ─── Call Recordings ────────────────────────────────────────── */
 const RECORDINGS = [
-    { name: "Healthcare Outreach · Call #847", duration: "4:32", date: "Apr 17", outcome: "Demo Booked",    url: "#" },
-    { name: "SMB Tech · Call #623",            duration: "2:18", date: "Apr 17", outcome: "Not Interested", url: "#" },
+    { name: "Healthcare Outreach · Call #847", duration: "4:32", date: "Apr 17", outcome: "Demo Booked",    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
+    { name: "SMB Tech · Call #623",            duration: "2:18", date: "Apr 17", outcome: "Not Interested", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
     { name: "Healthcare Outreach · Call #844", duration: "6:05", date: "Apr 16", outcome: "Follow Up",      url: "#" },
     { name: "Real Estate · Call #312",         duration: "3:47", date: "Apr 16", outcome: "Demo Booked",    url: "#" },
     { name: "SMB Tech · Call #618",            duration: "1:52", date: "Apr 15", outcome: "Voicemail",      url: "#" },

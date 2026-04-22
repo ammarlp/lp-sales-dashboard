@@ -38,6 +38,17 @@ function toggleFilterPanel() {
     document.getElementById('filterPanel').classList.toggle('open');
 }
 
+/* ─── Tab Switching ────────────────────────────────────────────── */
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('onclick').includes(tabId));
+    });
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.remove('active');
+    });
+    document.getElementById('tab-' + tabId).classList.add('active');
+}
+
 /* ─── Date Presets ────────────────────────────────────────────── */
 function setPreset(preset) {
     currentPreset = preset;
@@ -59,22 +70,50 @@ function setPreset(preset) {
 async function applyFilters() {
     const data = MOCK_DATA[currentPreset] || MOCK_DATA.month;
 
-    setOverviewLoading(true);
+    setSectionLoading('tab-overview', true);
+    setSectionLoading('tab-linkedin', true);
+    setSectionLoading('tab-cold-calling', true);
     document.querySelectorAll('.kpi-value').forEach(el => el.classList.add('refreshing'));
     renderMeetingsBookedSkeleton();
 
-    const liveMain = await fetchOverviewLive();
-    const liveTrend = await fetchTrendLive();
+    const [liveMain, liveTrend] = await Promise.all([
+        fetchOverviewLive(),
+        fetchTrendLive(),
+    ]);
 
     setTimeout(() => {
         renderMain(liveMain || data.main);
         renderMeetingsBooked((liveMain && liveMain.meetings_booked_list) || (data.main && data.main.meetings_booked_list) || []);
-        renderLinkedIn(data.linkedin);
-        renderColdCalling(data.cold_calling);
         updateCharts(data, liveTrend);
-        document.querySelectorAll('.kpi-value').forEach(el => el.classList.remove('refreshing'));
-        setOverviewLoading(false);
+        setSectionLoading('tab-overview', false);
+        document.querySelectorAll('#tab-overview .kpi-value').forEach(el => el.classList.remove('refreshing'));
     }, 160);
+
+    // Cold-calling data can be slow due to rate-limited upstream APIs.
+    // Update it asynchronously so the full dashboard does not block.
+    fetchColdCallingLive().then(liveCold => {
+        renderColdCalling((liveCold && liveCold.cold_calling) || data.cold_calling);
+        renderRecordingsList((liveCold && liveCold.recordings) || RECORDINGS);
+        setSectionLoading('tab-cold-calling', false);
+        document.querySelectorAll('#tab-cold-calling .kpi-value').forEach(el => el.classList.remove('refreshing'));
+    }).catch(() => {
+        renderColdCalling(data.cold_calling);
+        renderRecordingsList(RECORDINGS);
+        setSectionLoading('tab-cold-calling', false);
+        document.querySelectorAll('#tab-cold-calling .kpi-value').forEach(el => el.classList.remove('refreshing'));
+    });
+
+    fetchLinkedInLive().then(liveLinkedIn => {
+        renderLinkedIn((liveLinkedIn && liveLinkedIn.linkedin) || data.linkedin);
+        renderRepliesList((liveLinkedIn && liveLinkedIn.replies) || LI_REPLIES);
+        setSectionLoading('tab-linkedin', false);
+        document.querySelectorAll('#tab-linkedin .kpi-value').forEach(el => el.classList.remove('refreshing'));
+    }).catch(() => {
+        renderLinkedIn(data.linkedin);
+        renderRepliesList(LI_REPLIES);
+        setSectionLoading('tab-linkedin', false);
+        document.querySelectorAll('#tab-linkedin .kpi-value').forEach(el => el.classList.remove('refreshing'));
+    });
 }
 
 function resetFilters() {
@@ -119,6 +158,65 @@ async function fetchTrendLive() {
     }
 }
 
+async function fetchColdCallingLive() {
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 60000); // 60-second timeout
+        const params = new URLSearchParams({ preset: currentPreset });
+        if (currentPreset === 'custom') {
+            const s = document.getElementById('dateFrom')?.value || '';
+            const e = document.getElementById('dateTo')?.value || '';
+            if (s && e) {
+                params.set('start', s);
+                params.set('end', e);
+            }
+        }
+
+        console.log(`[Cold Calling API] Fetching /api/cold-calling?${params.toString()}`);
+        const res = await fetch(`/api/cold-calling?${params.toString()}`, { signal: controller.signal });
+        clearTimeout(timeout);
+        
+        if (!res.ok) {
+            console.error('[Cold Calling API] HTTP Error:', res.status, res.statusText);
+            throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
+        const json = await res.json();
+        console.log('[Cold Calling API] Response:', json);
+        
+        if (!json.ok) {
+            console.error('[Cold Calling API] Endpoint reported failure:', json);
+            return null;
+        }
+        
+        return json;
+    } catch (err) {
+        console.error('[Cold Calling API] Fetch Exception caught:', err);
+        throw err;
+    }
+}
+
+async function fetchLinkedInLive() {
+    try {
+        const params = new URLSearchParams({ preset: currentPreset });
+        if (currentPreset === 'custom') {
+            const s = document.getElementById('dateFrom')?.value || '';
+            const e = document.getElementById('dateTo')?.value || '';
+            if (s && e) {
+                params.set('start', s);
+                params.set('end', e);
+            }
+        }
+
+        const res = await fetch(`/api/linkedin?${params.toString()}`);
+        if (!res.ok) return null;
+        const json = await res.json();
+        return json && json.ok ? json : null;
+    } catch (err) {
+        return null;
+    }
+}
+
 /* ─── Formatters ──────────────────────────────────────────────── */
 function fmt(key, val) {
     if (val === 0 || val == null) return '0';
@@ -153,6 +251,7 @@ function renderLinkedIn(d) {
     set('v-li-conn',     'connection_requests',     d.connection_requests);
     set('v-li-accepted', 'total_accepted',          d.total_accepted);
     set('v-li-replied',  'total_replied',           d.total_replied);
+    set('v-li-positive', 'positive_response',       d.positive_response);
     set('v-li-demos',    'demos_booked',            d.demos_booked);
     set('v-li-qd',       'qualified_demos',         d.qualified_demos);
     set('v-li-cpqd',     'cost_per_qualified_demo', d.cost_per_qualified_demo);
@@ -162,6 +261,7 @@ function renderLinkedIn(d) {
     // Conversion rates
     setText('r-li-accepted', pct(d.total_accepted, d.connection_requests) + ' accept rate');
     setText('r-li-replied',  pct(d.total_replied,  d.total_accepted)      + ' reply rate');
+    setText('r-li-positive', pct(d.positive_response, d.total_replied)    + ' positive rate');
     setText('r-li-demos',    pct(d.demos_booked,   d.total_replied)       + ' → demo');
 
     // Channel summary
@@ -203,8 +303,8 @@ function setText(id, text) {
 function renderStaticLists() {
     renderCampaignList('list-cc-campaigns', 'cc-camp-count', CAMPAIGNS.cold_calling, 'calls');
     renderCampaignList('list-li-campaigns', 'li-camp-count', CAMPAIGNS.linkedin,     'connections');
-    renderRecordingsList();
-    renderRepliesList();
+    renderRecordingsList(RECORDINGS);
+    renderRepliesList(LI_REPLIES);
 }
 
 function renderMeetingsBooked(items) {
@@ -279,8 +379,8 @@ function renderMeetingsBookedSkeleton() {
     toggleMeetingsLoadMore(false);
 }
 
-function setOverviewLoading(isLoading) {
-    document.querySelectorAll('.main-grid .kpi-card').forEach(card => {
+function setSectionLoading(sectionId, isLoading) {
+    document.querySelectorAll(`#${sectionId} .kpi-card`).forEach(card => {
         card.classList.toggle('skeleton-loading', isLoading);
     });
 }
@@ -307,37 +407,70 @@ function renderCampaignList(listId, countId, campaigns, statKey) {
     }).join('');
 }
 
-function renderRecordingsList() {
+function renderRecordingsList(recordings) {
     const ul = document.getElementById('list-recordings');
     if (!ul) return;
 
-    ul.innerHTML = RECORDINGS.map(r => `
+    const rows = Array.isArray(recordings) ? recordings : [];
+    ul.innerHTML = rows.map(r => {
+        const meta = `${(r.duration || '')}${r.duration ? ' | ' : ''}${(r.date || '')}${r.date ? ' | ' : ''}${(r.outcome || '')}`;
+        return `
         <li>
             <div class="item-main">
-                <div class="item-name">${r.name}</div>
-                <div class="item-meta">${r.duration} · ${r.date} · ${r.outcome}</div>
+                <div class="item-name">${r.name || 'Call Recording'}</div>
+                <div class="item-meta">${meta}</div>
             </div>
-            <a href="${r.url}" class="play-link">▶ Play</a>
+            ${renderRecordingAction(r.url)}
         </li>
-    `).join('');
+    `;
+    }).join('');
 }
 
-function renderRepliesList() {
+function renderRecordingAction(url) {
+    const safe = String(url || '').trim();
+    if (!safe || safe === '#') return '<span class="play-link">No audio</span>';
+    const lower = safe.toLowerCase();
+    const isAudio = /\\.mp3|\\.wav|\\.ogg|\\.m4a|audio|record/i.test(lower);
+    if (isAudio) {
+        return `<audio controls preload="none" style="max-width:220px"><source src="${safe}"></audio>`;
+    }
+    return `<a href="${safe}" target="_blank" rel="noopener noreferrer" class="play-link">Open</a>`;
+}
+
+function renderRepliesList(replies) {
     const ul = document.getElementById('list-li-replies');
     if (!ul) return;
 
-    ul.innerHTML = LI_REPLIES.map(r => `
+    const rows = Array.isArray(replies) ? replies : [];
+    if (!rows.length) {
+        ul.innerHTML = '<li><div class="item-main"><div class="item-name">No recent LinkedIn replies in selected range</div></div></li>';
+        return;
+    }
+    ul.innerHTML = rows.map(r => `
         <li>
-            <span class="reply-dot s-${r.sentiment}"></span>
+            <span class="reply-dot s-${r.sentiment || 'neu'}"></span>
             <div class="item-main" style="margin-left:6px">
-                <div class="item-name">${r.name} <span style="color:var(--text3);font-weight:400">· ${r.company}</span></div>
-                <div class="item-meta">"${r.msg}"</div>
+                <div class="item-name">${r.name || 'Unknown'} <span style="color:var(--text3);font-weight:400">| ${r.company || ''}</span></div>
+                <div class="item-meta">"${r.msg || ''}"</div>
             </div>
-            <span class="reply-time">${r.time}</span>
+            <span class="reply-time">${toRelativeTime(r.timestamp, r.time)}</span>
         </li>
     `).join('');
 }
 
+function toRelativeTime(timestamp, fallback) {
+    if (!timestamp) return fallback || '';
+    const d = new Date(timestamp);
+    if (!Number.isFinite(d.getTime())) return fallback || '';
+    const diffMs = Date.now() - d.getTime();
+    if (diffMs < 60000) return 'just now';
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+}
 /* ─── Charts ──────────────────────────────────────────────────── */
 function initCharts() {
     Chart.defaults.color          = '#6b635b';

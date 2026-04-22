@@ -684,6 +684,45 @@ body {
     flex-shrink: 0;
 }
 
+/* ── TABS ───────────────────────────────────── */
+.tabs-nav {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 0px;
+}
+.tab-btn {
+    padding: 10px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: var(--text2);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: -2px;
+}
+.tab-btn:hover {
+    color: var(--text);
+}
+.tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+.tab-pane {
+    display: none;
+    animation: fade-in 0.2s ease-in-out;
+}
+.tab-pane.active {
+    display: block;
+}
+@keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 /* ── flatpickr dark ────────────────────────── */
 .flatpickr-calendar {
     background: var(--bg2) !important;
